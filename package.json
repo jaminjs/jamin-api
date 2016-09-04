@@ -1,0 +1,15 @@
+{
+  "name": "music-api",
+  "version": "0.0.1",
+  "description": "API to serve up music files and organize them for individual users",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "music",
+    "api"
+  ],
+  "author": "Jeremy Tice <jeremy@jeremytice.com>",
+  "license": "ISC"
+}
