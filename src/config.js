@@ -12,6 +12,7 @@ let config = {
     migrations: {
       tableName: 'migrations',
     },
+    useNullAsDefault: true,
   },
 };
 
