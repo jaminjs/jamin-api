@@ -4,9 +4,10 @@
   "description": "API to serve up music files and organize them for individual users",
   "main": "build/index.js",
   "scripts": {
-    "compile": "babel -d build/ src/",
+    "compile": "rm -rf ./build/* && babel -d build/ src/",
     "flow": "flow check",
     "lint": "eslint src",
+    "knex": "knex",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -42,6 +43,7 @@
     "koa": "^1.2.2",
     "koa-json": "^1.1.3",
     "koa-qs": "^2.0.0",
+    "lodash.merge": "^4.6.0",
     "nodemon": "^1.10.2",
     "path-to-regexp": "^1.5.3",
     "sqlite3": "^3.1.4"
