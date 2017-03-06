@@ -1,5 +1,6 @@
 //@flow
 import isEmpty from 'lodash.isempty';
+import flow from 'lodash.flow';
 
 import knex from '../../knex';
 import handlerTypeMatcher from './handler-type-matcher';
@@ -18,35 +19,40 @@ export default function({
 } : ModelConfig) {
   const table = knex(tableName);
 
+  const list = flow(buildParams, (p) => table.where(p).then());
+  const instance = (id) => table.where({ id }).limit(1).then(rows => rows[0]);
+  const update = (id, changes) => table.where({ id }).update(changes);
+  const create = (data) => table.insert(data);
+  const del = (id) => table.where({ id }).del().then();
+
   const handlers = {
-    *list(ctx) {
-      const params = buildParams(ctx.query);
-      const rows = yield table.where(params).then();
+    async list(ctx) {
+      const rows = await list(ctx.query);
 
       ctx.body = {
         data: rows,
       };
     },
-    *instance(ctx) {
-      const rows = yield table.where({ id: ctx.id }).limit(1).then();
+    async instance(ctx) {
+      const row = await instance(ctx.id);
 
-      if (isEmpty(rows)) {
+      if (isEmpty(row)) {
         ctx.status = 404;
         ctx.body = {
           error: 'Not found',
         };
       } else {
         ctx.body = {
-          data: rows[0],
+          data: row,
         };
       }
     },
-    *update(ctx) {
-      yield table.where({ id: ctx.id }).update(ctx.request.body);
+    async update(ctx) {
+      await update(ctx.id, ctx.request.body);
 
-      yield* handlers.instance(ctx);
+      await handlers.instance(ctx);
     },
-    *create(ctx) {
+    async create(ctx) {
       const params = ctx.request.body;
 
       if (Array.isArray(params)) {
@@ -57,14 +63,14 @@ export default function({
         return;
       }
 
-      const insertedIDs = yield table.insert(params);
+      const insertedIDs = await create(params);
       ctx.id = insertedIDs[0];
       ctx.status = 201;
 
-      yield* handlers.instance(ctx);
+      await handlers.instance(ctx);
     },
-    *delete(ctx) {
-      const numDeleted = yield table.where({ id: ctx.id }).del().then();
+    async delete(ctx) {
+      const numDeleted = await del(ctx.id);
 
       ctx.body = {
         deleted: numDeleted,
@@ -74,20 +80,23 @@ export default function({
 
   const typeMatcher = handlerTypeMatcher({ pluralName });
 
-  function *Handler(next) {
-    const ctx = this;
-
+  async function Handler(ctx, next) {
     // this also adds ctx.id for instance endpoints
     const type = typeMatcher(ctx);
 
     if (type != null) {
-      yield* handlers[type](ctx);
+      await handlers[type](ctx);
     }
 
-    return yield* next;
+    return await next();
   }
 
   return {
+    create,
+    del,
+    instance,
+    list,
+    update,
     Handler,
   };
 }

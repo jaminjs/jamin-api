@@ -7,6 +7,19 @@ const operators = {
   },
 };
 
+/**
+ * Allows us to convert query params into a function that can be passed to knex.
+ * @example
+ * table.where(buildParams({ name: 'abc', { id: { in: [1, 2, 3] } } }));
+ * // is the equivalent of
+ * table.where({ name: 'abc' }).whereIn('id', [1, 2, 3]);
+ * // or more precisely...
+ * table
+ *   .where({ name: 'abc' })
+ *   .where(function () { operators.in(this, 'id', [1, 2, 3]) });
+ * @param  {Object} query     Query param object
+ * @return {function|Object}  Something that can be passed to knex.where
+ */
 export default function buildParams(query) {
   const complexValues = pickBy(
     query,

@@ -1,6 +1,6 @@
 //@flow
 
-import koa from 'koa';
+import Koa from 'koa';
 import qs from 'koa-qs';
 import json from 'koa-json';
 import bodyParser from 'koa-bodyparser';
@@ -8,7 +8,7 @@ import models from './models';
 
 const PORT = (+process.env.PORT) || 4000;
 
-const app = koa();
+const app = new Koa();
 qs(app); // enable consistent, extended querystring parsing
 app.use(json());
 app.use(bodyParser());
