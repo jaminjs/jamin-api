@@ -1,3 +1,5 @@
 import Song from './song';
 
-export default [Song];
+export default {
+  Song,
+};

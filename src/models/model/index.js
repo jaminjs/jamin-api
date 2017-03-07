@@ -1,6 +1,9 @@
 //@flow
 import isEmpty from 'lodash.isempty';
-import flow from 'lodash.flow';
+import keyBy from 'lodash.keyby';
+import omit from 'lodash.omit';
+import pick from 'lodash.pick';
+import DataLoader from 'dataloader';
 
 import knex from '../../knex';
 import handlerTypeMatcher from './handler-type-matcher';
@@ -12,14 +15,48 @@ type ModelConfig = {
   tableName: ?string,
 };
 
+const specialParamHandlers = {
+  _limit: (chain, limit) => (limit ? chain.limit(limit) : chain),
+  _offset: (chain, offset) => (offset ? chain.offset(offset) : chain),
+};
+const specialParamKeys = Object.keys(specialParamHandlers);
+
+function handleSpecialParams(table, params) {
+  const specialParams = pick(params, specialParamKeys);
+
+  if (isEmpty(specialParams)) {
+    return table;
+  }
+
+  return Object.entries(specialParams).reduce(
+    (chain, [key, val]) => specialParamHandlers[key](chain, val),
+    table
+  );
+}
+
+function handleRegularParams(table, params) {
+  const regularParams = omit(params, specialParamKeys);
+
+  if (isEmpty(regularParams)) {
+    return table;
+  }
+
+  return table.where(buildParams(params));
+}
+
+function handleParams(table, params) {
+  return handleSpecialParams(handleRegularParams(table, params), params);
+}
+
 export default function({
   name,
+  schema,
   pluralName = `${name}s`,
   tableName = pluralName,
 } : ModelConfig) {
   const table = knex(tableName);
 
-  const list = flow(buildParams, (p) => table.where(p).then());
+  const list = (params) => handleParams(table, params).then();
   const instance = (id) => table.where({ id }).limit(1).then(rows => rows[0]);
   const update = (id, changes) => table.where({ id }).update(changes);
   const create = (data) => table.insert(data);
@@ -98,5 +135,10 @@ export default function({
     list,
     update,
     Handler,
+    schema,
+    loader: () => new DataLoader(ids => list({ id: { in: ids } }).then(rows => {
+      const byId = keyBy(rows, 'id');
+      return ids.map(id => byId[id]);
+    })),
   };
 }
