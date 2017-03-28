@@ -1,5 +1,10 @@
 //@flow
 import isEmpty from 'lodash.isempty';
+import keyBy from 'lodash.keyby';
+import omit from 'lodash.omit';
+import mapValues from 'lodash.mapvalues';
+import pick from 'lodash.pick';
+import DataLoader from 'dataloader';
 
 import knex from '../../knex';
 import handlerTypeMatcher from './handler-type-matcher';
@@ -11,42 +16,90 @@ type ModelConfig = {
   tableName: ?string,
 };
 
+const specialParamHandlers = {
+  _limit: (chain, limit) => (limit ? chain.limit(limit) : chain),
+  _offset: (chain, offset) => (offset ? chain.offset(offset) : chain),
+};
+const specialParamKeys = Object.keys(specialParamHandlers);
+
+function handleSpecialParams(table, params) {
+  const specialParams = pick(params, specialParamKeys);
+
+  if (isEmpty(specialParams)) {
+    return table;
+  }
+
+  return Object.entries(specialParams).reduce(
+    (chain, [key, val]) => specialParamHandlers[key](chain, val),
+    table
+  );
+}
+
+function handleRegularParams(table, params) {
+  const regularParams = omit(params, specialParamKeys);
+
+  if (isEmpty(regularParams)) {
+    return table;
+  }
+
+  return table.where(buildParams(params));
+}
+
+function handleParams(table, params) {
+  return handleSpecialParams(handleRegularParams(table, params), params);
+}
+
 export default function({
   name,
+  schema,
+  defaults = {},
   pluralName = `${name}s`,
   tableName = pluralName,
+  customInstanceHandlers = {},
+  customListHandlers = {},
 } : ModelConfig) {
   const table = knex(tableName);
 
+  const withDefaults = (obj) => mapValues(obj, (val, key) => (
+    (val == null && key in defaults) ? defaults[key] : val
+  ));
+
+  const list = (params) =>
+    handleParams(table, params).then(rows => rows.map(withDefaults));
+  const instance = (id) =>
+    table.where({ id }).limit(1).then(rows => rows[0]).then(withDefaults);
+  const update = (id, changes) => table.where({ id }).update(changes);
+  const create = (data) => table.insert(data);
+  const del = (id) => table.where({ id }).del().then();
+
   const handlers = {
-    *list(ctx) {
-      const params = buildParams(ctx.query);
-      const rows = yield table.where(params).then();
+    async list(ctx) {
+      const rows = await list(ctx.query);
 
       ctx.body = {
         data: rows,
       };
     },
-    *instance(ctx) {
-      const rows = yield table.where({ id: ctx.id }).limit(1).then();
+    async instance(ctx) {
+      const row = await instance(ctx.id);
 
-      if (isEmpty(rows)) {
+      if (isEmpty(row)) {
         ctx.status = 404;
         ctx.body = {
           error: 'Not found',
         };
       } else {
         ctx.body = {
-          data: rows[0],
+          data: row,
         };
       }
     },
-    *update(ctx) {
-      yield table.where({ id: ctx.id }).update(ctx.request.body);
+    async update(ctx) {
+      await update(ctx.id, ctx.request.body);
 
-      yield* handlers.instance(ctx);
+      await handlers.instance(ctx);
     },
-    *create(ctx) {
+    async create(ctx) {
       const params = ctx.request.body;
 
       if (Array.isArray(params)) {
@@ -57,14 +110,14 @@ export default function({
         return;
       }
 
-      const insertedIDs = yield table.insert(params);
+      const insertedIDs = await create(params);
       ctx.id = insertedIDs[0];
       ctx.status = 201;
 
-      yield* handlers.instance(ctx);
+      await handlers.instance(ctx);
     },
-    *delete(ctx) {
-      const numDeleted = yield table.where({ id: ctx.id }).del().then();
+    async delete(ctx) {
+      const numDeleted = await del(ctx.id);
 
       ctx.body = {
         deleted: numDeleted,
@@ -72,22 +125,42 @@ export default function({
     },
   };
 
-  const typeMatcher = handlerTypeMatcher({ pluralName });
+  const typeMatcher = handlerTypeMatcher({
+    customInstanceHandlers,
+    customListHandlers,
+    pluralName,
+  });
 
-  function *Handler(next) {
-    const ctx = this;
-
+  async function Handler(ctx, next) {
     // this also adds ctx.id for instance endpoints
     const type = typeMatcher(ctx);
 
     if (type != null) {
-      yield* handlers[type](ctx);
+      if (typeof type === 'function') {
+        if (ctx.id != null) {
+          // Store the instance, if it exists, for custom instance handlers.
+          ctx.instance = await instance(ctx.id);
+        }
+        await type(ctx);
+      } else {
+        await handlers[type](ctx);
+      }
     }
 
-    return yield* next;
+    return await next();
   }
 
   return {
+    create,
+    del,
+    instance,
+    list,
+    update,
     Handler,
+    schema,
+    loader: () => new DataLoader(ids => list({ id: { in: ids } }).then(rows => {
+      const byId = keyBy(rows, 'id');
+      return ids.map(id => byId[id]);
+    })),
   };
 }
