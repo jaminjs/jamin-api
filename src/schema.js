@@ -16,8 +16,17 @@ schema {
 }
 `];
 
+const sanitizeSongPath = (song) => ({
+  ...song,
+  path: `/songs/${song.id}/file`,
+});
+
 const rootResolvers = {
   Query: {
+    async song(root, { id }, context) {
+      return sanitizeSongPath(await context.loaders.Song.load(id));
+    },
+
     async songs(root, { offset, limit }, context) {
       const songs = await context.models.Song.list({
         _limit: limit,
@@ -28,7 +37,7 @@ const rootResolvers = {
         context.loaders.Song.prime(song.id, song);
       }
 
-      return songs;
+      return songs.map(sanitizeSongPath);
     },
   },
 };

@@ -2,6 +2,7 @@
 import isEmpty from 'lodash.isempty';
 import keyBy from 'lodash.keyby';
 import omit from 'lodash.omit';
+import mapValues from 'lodash.mapvalues';
 import pick from 'lodash.pick';
 import DataLoader from 'dataloader';
 
@@ -51,13 +52,22 @@ function handleParams(table, params) {
 export default function({
   name,
   schema,
+  defaults = {},
   pluralName = `${name}s`,
   tableName = pluralName,
+  customInstanceHandlers = {},
+  customListHandlers = {},
 } : ModelConfig) {
   const table = knex(tableName);
 
-  const list = (params) => handleParams(table, params).then();
-  const instance = (id) => table.where({ id }).limit(1).then(rows => rows[0]);
+  const withDefaults = (obj) => mapValues(obj, (val, key) => (
+    (val == null && key in defaults) ? defaults[key] : val
+  ));
+
+  const list = (params) =>
+    handleParams(table, params).then(rows => rows.map(withDefaults));
+  const instance = (id) =>
+    table.where({ id }).limit(1).then(rows => rows[0]).then(withDefaults);
   const update = (id, changes) => table.where({ id }).update(changes);
   const create = (data) => table.insert(data);
   const del = (id) => table.where({ id }).del().then();
@@ -115,14 +125,26 @@ export default function({
     },
   };
 
-  const typeMatcher = handlerTypeMatcher({ pluralName });
+  const typeMatcher = handlerTypeMatcher({
+    customInstanceHandlers,
+    customListHandlers,
+    pluralName,
+  });
 
   async function Handler(ctx, next) {
     // this also adds ctx.id for instance endpoints
     const type = typeMatcher(ctx);
 
     if (type != null) {
-      await handlers[type](ctx);
+      if (typeof type === 'function') {
+        if (ctx.id != null) {
+          // Store the instance, if it exists, for custom instance handlers.
+          ctx.instance = await instance(ctx.id);
+        }
+        await type(ctx);
+      } else {
+        await handlers[type](ctx);
+      }
     }
 
     return await next();

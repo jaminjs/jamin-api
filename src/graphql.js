@@ -15,7 +15,7 @@ router.post('/graphql', graphqlKoa({
   }),
   context: {
     models,
-    loaders: mapValues(models, m => m.loader),
+    loaders: mapValues(models, m => m.loader()),
   },
 }));
 router.get('/graphql', graphiqlKoa({ endpointURL: '/graphql' }));
