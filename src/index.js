@@ -6,6 +6,7 @@ import json from 'koa-json';
 import bodyParser from 'koa-bodyparser';
 import models from './models';
 import graphql from './graphql';
+import uploadHandler from './upload';
 
 const PORT = (+process.env.PORT) || 4000;
 
@@ -20,6 +21,8 @@ for (const model of Object.values(models)) {
 }
 
 app.use(...graphql());
+
+app.use(uploadHandler);
 
 console.log(`Listening on port ${PORT}...`);
 app.listen(PORT);
