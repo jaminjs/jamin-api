@@ -43,6 +43,7 @@
     "graphql": "^0.9.1",
     "graphql-server-koa": "^0.6.0",
     "graphql-tools": "^0.10.1",
+    "jsonwebtoken": "^7.3.0",
     "knex": "^0.12.7",
     "koa": "^2.0.1",
     "koa-bodyparser": "^4.1.0",

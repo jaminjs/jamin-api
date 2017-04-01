@@ -8,7 +8,7 @@ import models from './models';
 
 const router = new koaRouter();
 
-router.post('/graphql', graphqlKoa({
+router.post('/graphql', graphqlKoa((ctx) => ({
   schema: makeExecutableSchema({
     typeDefs: schema,
     resolvers,
@@ -16,8 +16,9 @@ router.post('/graphql', graphqlKoa({
   context: {
     models,
     loaders: mapValues(models, m => m.loader()),
+    currentUser: ctx.currentUser,
   },
-}));
+})));
 router.get('/graphql', graphiqlKoa({ endpointURL: '/graphql' }));
 
 export default () => [
